@@ -1,14 +1,23 @@
 
 
 [node] #地址列表，注意是10进制
+#终端地址目标选择方式： 
+#    1. "range" 选择 从下方 "addrRangeMin" 到 "addrRangeMax" 范围内的终端
+#    2. "list"  选择 从下方 "addrList" 数组内定义的终端
+addrSelect =  "range"
+
+addrRangeMin = 1
+addrRangeMax = 300
 addrList = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]
 
 [mac] #mac层参数
 pingPeriod = 32
 beaconTimeInterval = 128000 #单位ms
+# offsetSelect = "fixed" #偏移方式选择 random 或者 fixed
+offsetSelect = "random" 
 
 [test] #测试参数
-loopCnt = 100 #测试循环次数
+loopCnt = 1 #测试循环次数
 
 [log]
 path = "./log/run.log"

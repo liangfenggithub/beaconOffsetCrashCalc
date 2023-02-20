@@ -14,7 +14,10 @@ import (
 var destAddr []int
 var pingPeriod int
 var beaconTimeInterval int
+var allLoopCnt int
 var loopCnt int
+var addrSelect string
+var offsetSelect string
 
 type offsetCount struct {
 	count  int
@@ -54,10 +57,21 @@ func init() {
 
 	//参数初始化
 
-	destAddr = viper.GetIntSlice("node.addrList")
+	offsetSelect = viper.GetString("mac.offsetSelect")
 	pingPeriod = viper.GetInt("mac.pingPeriod")
 	beaconTimeInterval = viper.GetInt("mac.beaconTimeInterval")
-	loopCnt = viper.GetInt("test.loopCnt")
+	allLoopCnt = viper.GetInt("test.loopCnt")
+	addrSelect = viper.GetString("node.addrSelect")
+	if addrSelect == "list" {
+		destAddr = viper.GetIntSlice("node.addrList")
+	} else if addrSelect == "range" {
+		addrRangeMin := viper.GetInt("node.addrRangeMin")
+		addrRangeMax := viper.GetInt("node.addrRangeMax")
+
+		for i := addrRangeMin; i < addrRangeMax; i++ {
+			destAddr = append(destAddr, i)
+		}
+	}
 
 }
 
@@ -85,22 +99,27 @@ func ComputePingOffset(beaconTime uint32, addr uint32, pingPeriod int) (uint16, 
 
 	result = ((uint32(output[0])) + (uint32(output[1]) * 256))
 	//偏移方式选择
+	if offsetSelect == "fixed" { //固定偏移
+		result = addr
+	}
 	return uint16(result % uint32(pingPeriod)), nil
 }
 func nodeCrashTest() {
 
-	allSomeOffset := make([]int, pingPeriod, pingPeriod)
-
 	nowTimeMs := time.Now().UnixMilli()
 	lastBeaconTimeS := uint32((nowTimeMs - nowTimeMs%int64(beaconTimeInterval)) / 1000)
+	allSomeOffset := make([]int, pingPeriod, pingPeriod) //相同偏移出现次数统计 index是偏移 val是该偏移出现总数
+	slotOccupy := make([]int, pingPeriod, pingPeriod)    //时间槽占用统计 index是时间槽占用个数(0-31) val是index出现次数
 
 	//循环执行N次
 
-	for loopCnt := 0; loopCnt < 10; loopCnt++ {
+	for loopCnt = 0; loopCnt < allLoopCnt; loopCnt++ {
 
 		//单次存储结果初始化(构造指定大小为pingPeriod的切片)
-		someOffsetResult := make([]map[int]int, pingPeriod, pingPeriod) //int(addr) int (addr)
-		someOffsetCount := make([]offsetCount, pingPeriod, pingPeriod)
+		someOffsetResult := make([]map[int]int, pingPeriod, pingPeriod) //数组序号是偏移量，map key是地址，map value也是地址
+		someOffsetArr := make([]offsetCount, pingPeriod, pingPeriod)
+		var notAppear []int
+		// notAppear := make([]int, pingPeriod, pingPeriod)
 
 		log.Printf("*************************************** 第 %v 次 测试结果 *****************************************************\n", loopCnt)
 		// 计算所有终端的偏移量
@@ -123,39 +142,54 @@ func nodeCrashTest() {
 			if res != nil {
 				log.Printf("偏移量为 %v 有 %v 个终端\n", offset, len(res))
 
-				// 统计出现 多 次相同偏移量的终端个数
-				someOffsetCount[len(res)].count++
-				if someOffsetCount[len(res)].offset == nil {
+				// 统计出现多次相同的偏移量
+				someOffsetArr[len(res)].count++
+				if someOffsetArr[len(res)].offset == nil {
 
-					someOffsetCount[len(res)].offset = make([]int, 0)
+					someOffsetArr[len(res)].offset = make([]int, 0)
 				}
-				someOffsetCount[len(res)].offset = append(someOffsetCount[len(res)].offset, offset)
+				someOffsetArr[len(res)].offset = append(someOffsetArr[len(res)].offset, offset)
+			} else {
+				notAppear = append(notAppear, offset) //记录未出现的偏移量
+				log.Printf("偏移量为 %v 未出现\n", offset)
 			}
 		}
 
 		//单次结果输出
 		log.Printf("**************************** beaonTime:%v loopCnt:%v ******************************************\n", lastBeaconTimeS, loopCnt)
-		for i, v := range someOffsetCount {
+		for i, v := range someOffsetArr {
 			// if v.count != 0 && i != 1 {
 			if v.count != 0 {
-				log.Printf("出现 %v 次偏移量的终端有: %v 个，偏移量分别是：%#v\n", i, v.count, v.offset)
+				log.Printf("出现 %v 次相同偏移量 %v 个，偏移量分别是：%#v\n", i, v.count, v.offset)
 				allSomeOffset[i] = allSomeOffset[i] + v.count
 			}
 			// } else {
 			// 	log.Printf("未出现的偏移量有: %v 个，偏移量分别是：%#v\n", v.count, v.offset)
 			// }
 		}
+		log.Printf("未出现的偏移量有 %v 个，分别是：%#v\n", len(notAppear), notAppear)
+
+		//时间槽占用统计
+		slotOccupy[pingPeriod-1-len(notAppear)]++
+
+		//变化beacon时间
 		lastBeaconTimeS = lastBeaconTimeS + uint32(beaconTimeInterval/1000)
 	}
 
 	//平均结果输出
 	// log.Printf("**************************** beaonTime:%v loopCnt:%v ******************************************\n", lastBeaconTimeS, loopCnt)
-	log.Printf("********************************************************************************************\n")
+	log.Printf("***************************************** %v 个终端 间隔周期 %v 秒 循环 %v 次 总体结果输出***************************************************\n", len(destAddr)+1, beaconTimeInterval/1000, loopCnt)
 
 	for i, v := range allSomeOffset {
 		if v != 0 {
+			// log.Printf("循环 %v 次beacon周期 出现 %v 次相同偏移量共有 %v 个， 平均有: %v 个\n", allLoopCnt, i, v, float32(v)/float32(allLoopCnt))
+			log.Printf("循环 %v 次beacon周期 出现 %v 次相同偏移量共有 %v 个\n", allLoopCnt, i, v)
+		}
+	}
 
-			log.Printf("%v 的beacon周期 出现 %v 次相同偏移量的终端总个数有 %v 个， 平均有: %v 个\n", loopCnt, i, v, v/loopCnt)
+	for i, v := range slotOccupy {
+		if v != 0 {
+			log.Printf("循环 %v 次 占用 %v 个槽 的次数有 %v 个\n", allLoopCnt, i, v)
 		}
 	}
 }
