@@ -2,22 +2,23 @@
 
 [node] #地址列表，注意是10进制
 #终端地址目标选择方式： 
-#    1. "range" 选择 从下方 "addrRangeMin" 到 "addrRangeMax" 范围内的终端
-#    2. "list"  选择 从下方 "addrList" 数组内定义的终端
-addrSelect =  "range"
+#    1. "random"  从下方 地址池 addrPollRangeRange 范围内随机选择N个终端进行下发测试,N的取值是 下方 randomSelectNum 范围内随机生成
+#    2. "fixed"   从下方 "fixAddrList" 数组内指定测试终端进行下发测试
+testAddrSelect =  "random"
 
-addrRangeMin = 1
-addrRangeMax = 300
-addrList = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32]
+addrPollRangeRange = [1,65535]  #地址池范围 10进制
+randomSelectNum = [20,30]       #随机选择测试终端个数 10进制
+fixAddrList = [1,2,4,8,9,11,12,13,15,17,18,21,23,24,27,28,30,31,] #指定固件终端 10进制
+
 
 [mac] #mac层参数
-pingPeriod = 32
-beaconTimeInterval = 128000 #单位ms
+pingPeriod = 32 
+beaconTimeInterval = 64000 #单位ms
 # offsetSelect = "fixed" #偏移方式选择 random 或者 fixed
 offsetSelect = "random" 
 
 [test] #测试参数
-loopCnt = 1 #测试循环次数
+loopCnt = 10 #测试循环次数
 
 [log]
 path = "./log/run.log"
