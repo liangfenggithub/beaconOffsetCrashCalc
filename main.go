@@ -63,7 +63,7 @@ func init() {
 	log.SetFlags(log.Lmicroseconds | log.Ldate)
 
 	//参数初始化
-	offsetSelect = viper.GetString("node.offsetSelect")
+	offsetSelect = viper.GetString("mac.offsetSelect")
 	pingPeriod = viper.GetInt("mac.pingPeriod")
 	beaconTimeInterval = viper.GetInt("mac.beaconTimeInterval")
 	allLoopCnt = viper.GetInt("test.loopCnt")
@@ -108,6 +108,14 @@ func ComputePingOffset(beaconTime uint32, addr uint32, pingPeriod int) (uint16, 
 	}
 	return uint16(result % uint32(pingPeriod)), nil
 }
+func IsContain(items []int, item int) bool {
+	for _, eachItem := range items {
+		if eachItem == item {
+			return true
+		}
+	}
+	return false
+}
 func nodeCrashTest() {
 
 	nowTimeMs := time.Now().UnixMilli()
@@ -121,7 +129,7 @@ func nodeCrashTest() {
 
 		//单次存储结果初始化(构造指定大小为pingPeriod的切片)
 		someOffsetResult := make([]map[int]int, pingPeriod, pingPeriod) //数组序号是偏移量，map key是地址，map value也是地址
-		someOffsetArr := make([]offsetCount, pingPeriod, pingPeriod)    //数组序号是
+		sameCntArr := make([]offsetCount, 64, 64)                       //数组序号是偏移量出现次数相同的次数，数组长度也就是最大次数暂定为64次
 		var notAppear []int
 		// notAppear := make([]int, pingPeriod, pingPeriod)
 
@@ -138,7 +146,13 @@ func nodeCrashTest() {
 			//其次从地址池中生成测试终端
 			destAddr = nil
 			for i := 0; i < addrNum; i++ {
+			RE_MAKE_RANDOM_ADDR:
 				addr := rand.Intn(addrPollRangeRange[1]-addrPollRangeRange[0]) + addrPollRangeRange[0]
+				if IsContain(destAddr, addr) {
+					// time.Sleep(time.Microsecond)
+					//出现地址重复，重新生成
+					goto RE_MAKE_RANDOM_ADDR
+				}
 				destAddr = append(destAddr, addr)
 
 			}
@@ -167,18 +181,19 @@ func nodeCrashTest() {
 		}
 		// log.Printf("%#v\n", someOffsetResult)
 		log.Printf("每个偏移量出现次数如下:\n")
-		for offset, res := range someOffsetResult {
+		for offset, res := range someOffsetResult { //遍历所有offset情况
 			if res != nil {
 				// log.Printf("偏移量为 %v 有 %v 个终端\n", offset, len(res))
 				log.Printf("偏移量: %v 出现  %v 次\n", offset, len(res))
 
-				// 统计出现多次相同的偏移量
-				someOffsetArr[len(res)].count++
-				if someOffsetArr[len(res)].offset == nil {
+				// 统计出现多次相同的偏移量，
+				cnt := len(res)         //cnt是相同偏移量出现的次数
+				sameCntArr[cnt].count++ //相同次数的总数
+				if sameCntArr[cnt].offset == nil {
 
-					someOffsetArr[len(res)].offset = make([]int, 0)
+					sameCntArr[cnt].offset = make([]int, 0)
 				}
-				someOffsetArr[len(res)].offset = append(someOffsetArr[len(res)].offset, offset)
+				sameCntArr[cnt].offset = append(sameCntArr[cnt].offset, offset) //统计相同次数的偏移量
 			} else {
 				notAppear = append(notAppear, offset) //记录未出现的偏移量
 				// log.Printf("偏移量: %v 未出现\n", offset)
@@ -189,19 +204,23 @@ func nodeCrashTest() {
 		// log.Printf("**************************** beaonTime:%v 循环次数:%v 测试终端个数:%v ******************************************\n", lastBeaconTimeS, loopCnt, len(destAddr))
 		log.Printf("***************************************** %v 个终端 偏移量统计结果如下:************************************************************\n", len(destAddr))
 
-		for i, v := range someOffsetArr {
-			if v.count != 0 {
-				log.Printf("出现 %v 次相同的有 %v 个偏移量，偏移量分别是：%#v\n", i, v.count, v.offset)
-				allSomeOffset[i] = allSomeOffset[i] + 1 //v.count //这里加1是统计出现相同的次数,而不是偏移量
+		//倒序遍历相同偏移量次数的数组，统计次数总数
+		maxCntFindFlag := 0
+		for i := len(sameCntArr) - 1; i >= 0; i-- {
+			if sameCntArr[i].count != 0 { //该次数有出现
+				log.Printf("出现 %v 次相同的有 %v 个偏移量，偏移量分别是：%#v\n", i, sameCntArr[i].count, sameCntArr[i].offset)
+
+				//只记录相同次数最大的次数 ，比如一轮下发出现2次偏移量相同 和3次偏移量相同，那么只记录3轮偏移量相同
+				if maxCntFindFlag == 0 {
+					maxCntFindFlag = 1
+					allSomeOffset[i] = allSomeOffset[i] + 1 //v.count //这里加1是统计出现相同的次数,而不是偏移量
+				}
 			}
-			// } else {
-			// 	log.Printf("未出现的偏移量有: %v 个，偏移量分别是：%#v\n", v.count, v.offset)
-			// }
 		}
 		log.Printf("未出现的偏移量有 %v 个，分别是：%#v\n", len(notAppear), notAppear)
 
 		//时间槽占用统计
-		slotOccupy[pingPeriod-1-len(notAppear)]++
+		slotOccupy[pingPeriod-len(notAppear)]++
 
 		//变化beacon时间
 		lastBeaconTimeS = lastBeaconTimeS + uint32(beaconTimeInterval/1000)

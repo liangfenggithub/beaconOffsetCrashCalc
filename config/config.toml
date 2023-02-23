@@ -6,8 +6,8 @@
 #    2. "fixed"   从下方 "fixAddrList" 数组内指定测试终端进行下发测试
 testAddrSelect =  "random"
 
-addrPollRangeRange = [1,65535]  #地址池范围 10进制
-randomSelectNum = [20,30]       #随机选择测试终端个数 10进制
+addrPollRangeRange = [1,9]  #地址池范围 10进制
+randomSelectNum = [8,9]       #随机选择测试终端个数 10进制
 fixAddrList = [1,2,4,8,9,11,12,13,15,17,18,21,23,24,27,28,30,31,] #指定固件终端 10进制
 
 
@@ -15,10 +15,10 @@ fixAddrList = [1,2,4,8,9,11,12,13,15,17,18,21,23,24,27,28,30,31,] #指定固件�
 pingPeriod = 32 
 beaconTimeInterval = 64000 #单位ms
 # offsetSelect = "fixed" #偏移方式选择 random 或者 fixed
-offsetSelect = "random" 
+offsetSelect = "fixed" 
 
 [test] #测试参数
-loopCnt = 10 #测试循环次数
+loopCnt = 10000 #测试循环次数
 
 [log]
 path = "./log/run.log"
